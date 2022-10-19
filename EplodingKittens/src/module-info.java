@@ -1,0 +1,9 @@
+/**
+ * 
+ */
+/**
+ * @author hjall
+ *
+ */
+module ExplodingKittens {
+}
