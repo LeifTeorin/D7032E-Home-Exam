@@ -1,9 +1,0 @@
-/**
- * 
- */
-/**
- * @author hjall
- *
- */
-module ExplodingKittens {
-}
