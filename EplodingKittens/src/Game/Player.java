@@ -12,6 +12,7 @@ import Game.Card.CardType;
 
 public class Player {
 	public int playerID;
+	public int turns = 1;
     public boolean online;
     public boolean isBot;
     public Socket connection;

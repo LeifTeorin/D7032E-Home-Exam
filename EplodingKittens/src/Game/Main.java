@@ -10,7 +10,7 @@ public class Main {
 	
     public static void main(String[] args) { 
     	try {
-    		Game test = new Game(6, 0);
+    		Game test = new Game(3, 3);
     	} catch(Exception e) {
     		System.out.println(e.getMessage());
     	}
