@@ -19,11 +19,21 @@ public class Game {
 	public static int numberOfTurnsToTake = 1; //attacked?
 	public int secondsToInterruptWithNope = 5;
 	
-	public Game(int numplayers, int numbots) throws IOException{ // creates an instance of the game if the player amount is between 2 and 5, it also creates the deck
-		if(numplayers+numbots < 2 || numplayers+numbots > 5){
-			throw new IOException("There can only be 2 - 5 players, ya dingus");
+	public Game(String params[]){ // creates an instance of the game if the player amount is between 2 and 5, it also creates the deck
+		if(params.length == 2) {
+			try {
+				this.setUpGame(Integer.valueOf(params[0]).intValue(), Integer.valueOf(params[1]).intValue());
+			} catch (IOException e) {
+				e.getMessage();
+				System.exit(0);
+			}
+		} else if(params.length == 1) {
+			try {
+				client(params[0]);
+			}catch(Exception e) {
+				e.getMessage();
+			}
 		}
-		deck = createDeck(numplayers + numbots);
 	}
 	
 	public ArrayList<Card> addKittens(ArrayList<Card> inputDeck, int playercount) { // adds the right amount of kittens and shuffles the deck
@@ -34,8 +44,11 @@ public class Game {
 		return inputDeck;
 	}
 	
-	public void setUpGame(int numplayers, int numbots) { // we host our server and add all our players, give them cards and add exploding kittens
-		
+	public void setUpGame(int numplayers, int numbots) throws IOException{  // we host our server and add all our players, give them cards and add exploding kittens
+		if(numplayers+numbots > 5 || numplayers + numbots < 2) {
+			throw new IOException("there can only be 2 - 5 players ya dinguz");
+		}
+		deck = createDeck(numplayers + numbots);
 		try {
 			server(numplayers, numbots);
 		} catch(Exception e) {
@@ -89,6 +102,50 @@ public class Game {
 		return deck;
 	}
 	
+	public int checkNrNope(ArrayList<Card> discard) {
+		int i=0;
+		while(i<discard.size() && discard.get(i).type==CardType.Nope) {
+			i++;	
+		}
+		return i;
+	}
+	
+	public void addToDiscardPile(Player currentPlayer, String card, ArrayList<Card> discard, ArrayList<Card> deck){
+		//After an interruptable card is played everyone has 5 seconds to play Nope
+		int nopePlayed = checkNrNope(discard);
+		ExecutorService threadpool = Executors.newFixedThreadPool(players.size());
+		for(Player p : players) {
+			p.sendMessage("Action: Player " + currentPlayer.playerID + " played " + card);
+			if(p.hand.contains(CardType.Nope)) { //only give the option to interrupt to those who have a Nope card
+				p.sendMessage("Press <Enter> to play Nope");
+				Runnable task = new Runnable() {
+		        	@Override
+		        	public void run() {
+	        			try {
+			        		String nextMessage = p.readMessage(true); //Read that is interrupted after secondsToInterruptWithNope
+			        		if(!nextMessage.equals(" ") && p.hand.contains(CardType.Nope)) {
+		    	    			discard.add(0, p.hand.remove(CardType.Nope));
+		    	    			for(Player notify: players)
+		    	    				notify.sendMessage("Player " + p.playerID + " played Nope");
+			        		}
+	        			} catch(Exception e) {
+	        				System.out.println("addToDiscardPile: " +e.getMessage());
+	        			}
+	        		}
+	        	};
+            	threadpool.execute(task);
+			}
+		}
+		threadpool.awaitTermination((secondsToInterruptWithNope*1000)+500, TimeUnit.MILLISECONDS); //add an additional delay to avoid concurrancy problems with the ObjectInputStream
+		for(Player notify: players)
+			notify.sendMessage("The timewindow to play Nope passed");
+		if(checkNrNope(discard)>nopePlayed) {
+			for(Player notify: players)
+				notify.sendMessage("Play another Nope? (alternate between Nope and Yup)");
+			addToDiscardPile(currentPlayer, card);
+		}
+	}
+	
 	public void getHand(int playerId) {
 		
 	}
@@ -100,16 +157,81 @@ public class Game {
 	}
 	
 	// jag tror alla funktioner ska ta kortleken som argument
-	public void pass(Player currentplayer) {
-		
+	public int pass(Player currentPlayer, ArrayList<Card> deck, ArrayList<Card> discardPile, int playersleft) {
+		Card drawn = deck.remove(0);
+		if(drawn.type == CardType.ExplodingKitten) {
+			for(int i=0; i<currentPlayer.hand.size(); i++) {
+				if(currentPlayer.hand.get(i).type == CardType.Defuse) {
+					currentPlayer.sendMessage("You defused the kitten. Where in the deck do you wish to place the ExplodingKitten? [0.." + (deck.size()-1) + "]");
+					deck.add((Integer.valueOf(currentPlayer.readMessage(false))).intValue(), drawn);
+					for(Player p : players) {
+						p.sendMessage("Player " + currentPlayer.playerID + " successfully defused a kitten");
+					}
+					return playersleft;
+				}
+				
+			}
+			discardPile.add(drawn);
+			discardPile.addAll(currentPlayer.hand);
+			currentPlayer.hand.clear();
+			currentPlayer.blowUp();
+			for(Player p : players) {
+				p.sendMessage("Player " + currentPlayer.playerID + " exploded");
+			}
+			playersleft --;
+			return playersleft;
+		}else {
+			currentPlayer.hand.add(drawn);
+			currentPlayer.sendMessage("You drew: " + drawn.type);
+			return playersleft;
+		}
 	}
 	
-	public void two(Player currentplayer) {
+	public void two(Player currentPlayer, CardType played, CardType targetCard, Player target, ArrayList<Card> deck, ArrayList<Card> discardPile) {
+		int removedFromHand = 0;
+		for(int i=0; i<currentPlayer.hand.size(); i++) { // we scan the deck and remove two instances of the played card
+			if(currentPlayer.hand.get(i).type == played) {
+				discardPile.add(0, currentPlayer.hand.remove(i)); // the card is moved from the hand to the discard pile
+				removedFromHand ++;
+				if(removedFromHand >=2) {
+					break;
+				}
+			}
+		}
+		addToDiscardPile(currentPlayer, "Two of a kind against player " + Integer.toString(target.playerID), discardPile, deck);
 		
+		if(checkNrNope() % 2 == 0) { // if an even amount of nopes have been played it means yea
+	        Random rnd = new Random();
+	        Card aCard = target.hand.remove(rnd.nextInt(target.hand.size()-1));
+	        currentPlayer.hand.add(aCard);
+	        target.sendMessage("You gave " + aCard + " to player " + currentPlayer.playerID);
+	        currentPlayer.sendMessage("You received " + aCard + " from player " + target.playerID);								
+		}
 	}
 	
-	public void three(Player currentplayer) {
-		
+	public void three(Player currentPlayer, CardType played, CardType targetCard, Player target, ArrayList<Card> deck, ArrayList<Card> discardPile) {
+		int removedFromHand = 0;
+		for(int i=0; i<currentPlayer.hand.size(); i++) { // we scan the deck and remove two instances of the played card
+			if(currentPlayer.hand.get(i).type == played) {
+				discardPile.add(0, currentPlayer.hand.remove(i)); // the card is moved from the hand to the discard pile
+				removedFromHand ++;
+				if(removedFromHand >=3) {
+					break;
+				}
+			}
+		}
+		addToDiscardPile(currentPlayer, "Three of a kind against player " + Integer.toString(target.playerID), discardPile, deck);
+		if(checkNrNope() % 2 == 0) {
+			Card aCard = Card.valueOf(targetCard);
+			if(target.hand.contains(aCard)) {
+				target.hand.remove(aCard);
+				currentPlayer.hand.add(aCard);
+	        	target.sendMessage("Player " + currentPlayer.playerID + " stole " + aCard);
+	        	currentPlayer.sendMessage("You received " + aCard + " from player " + target.playerID);										
+			} else {
+				currentPlayer.sendMessage("The player did not have any " + aCard);
+			}								
+		}
 	}
 	
 	public void attack(Player currentplayer) {
@@ -135,8 +257,8 @@ public class Game {
 	public void runGame() {
 		int currentplayernr = 0;
 		int playersleft = players.size();
-		Player currentPlayer = players.get(currentplayernr);
 		ArrayList<Player> playOrder = playOrder(players);
+		Player currentPlayer = playOrder.get(currentplayernr);
 		
 		while(playersleft > 1) { // as long as there are players left the game goes on
 			for(Player p : players) {
@@ -145,7 +267,7 @@ public class Game {
 				else
 					p.sendMessage("It is now the turn of player " + currentPlayer.playerID);
 			}
-			for(int i=0; i<numberOfTurnsToTake; i++) { // every player can take more than one turn depending on what happens in the game.
+			for(int i=0; i<currentPlayer.turns; i++) { // every player can take more than one turn depending on what happens in the game.
 				String otherPlayerIDs = "PlayerID: ";
 				for(Player p : players) {
 					if(p.playerID != currentPlayer.playerID)
@@ -201,14 +323,28 @@ public class Game {
 					} else {
 						currentPlayer.sendMessage("Not a viable option, try again");
 					}
+					if(i==(currentPlayer.turns-1)) {
+						currentPlayer.turns=1; //We have served all of our turns, reset it for the next player
+					}
+				}
+			}
+			while(currentPlayer.exploded && playersleft>1){ //next player that is still in the game
+				currentplayernr ++;
+				try {
+					currentPlayer = playOrder.get(currentplayernr);
+				}catch(IndexOutOfBoundsException e) {
+					currentplayernr = 0;
+					currentPlayer = playOrder.get(currentplayernr);
 				}
 			}
 		}
 		Player winner = currentPlayer;
-		for(Player notify: players)
+		for(Player notify: players) {
 			winner = (!notify.exploded?notify:winner);
-		for(Player notify: players)
+		}
+		for(Player notify: players) {
 			notify.sendMessage("Player " + winner.playerID + " has won the game");
+		}
 	}
 	
 	

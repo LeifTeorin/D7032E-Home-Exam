@@ -53,6 +53,10 @@ public class Player {
         }
     }
     
+    public void blowUp() {
+    	this.exploded = true;
+    }
+    
     public String readMessage(boolean interruptable) {
         String word = " "; 
         if(online)
