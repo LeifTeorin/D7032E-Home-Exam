@@ -19,7 +19,7 @@ public class Player {
     public boolean exploded = false;
     public ObjectInputStream inFromClient;
     public ObjectOutputStream outToClient;
-    public ArrayList<Card> hand = new ArrayList<Card>();
+    public ArrayList<String> hand = new ArrayList<String>();
 	public int secondsToInterruptWithNope = 5;
     
     Scanner in = new Scanner(System.in);
@@ -30,14 +30,14 @@ public class Player {
     	this.inFromClient = inFromClient; 
     	this.outToClient = outToClient; 
     	this.isBot = isBot;
-    	this.hand.add(new Card(CardType.Defuse));
+    	this.hand.add("Defuse");
     	if(connection == null)
     		this.online = false;
     	else
     		this.online = true;
 	}
     
-    public ArrayList<Card> getHand(){
+    public ArrayList<String> getHand(){
     	return hand;
     }
     
@@ -51,6 +51,10 @@ public class Player {
         } else if(!isBot){
             System.out.println(message);                
         }
+    }
+    
+    public void chooseMove() {
+        
     }
     
     public void blowUp() {
