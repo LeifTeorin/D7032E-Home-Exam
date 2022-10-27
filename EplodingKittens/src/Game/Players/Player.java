@@ -1,22 +1,18 @@
-package Game;
+package Game.Players;
 
 import java.util.*; 
 import java.io.*; 
 import java.net.*;
 import java.util.concurrent.*;
 
-import Game.Card;
-import Game.Card.CardType;
-
-
 
 public class Player {
 	public int playerID;
 	public int turns = 1;
     public boolean online;
-    public boolean isBot;
     public Socket connection;
     public boolean exploded = false;
+    public boolean isBot = false;
     public ObjectInputStream inFromClient;
     public ObjectOutputStream outToClient;
     public ArrayList<String> hand = new ArrayList<String>();
@@ -28,9 +24,9 @@ public class Player {
     	this.playerID = playerID; 
     	this.connection = connection; 
     	this.inFromClient = inFromClient; 
-    	this.outToClient = outToClient; 
-    	this.isBot = isBot;
+    	this.outToClient = outToClient; ;
     	this.hand.add("Defuse");
+    	this.isBot = isBot;
     	if(connection == null)
     		this.online = false;
     	else
@@ -53,12 +49,20 @@ public class Player {
         }
     }
     
-    public void chooseMove() {
-        
+    public String chooseMoveForBot() {
+        return "we choose a move";
     }
     
     public void blowUp() {
     	this.exploded = true;
+    }
+    
+    public void setTurns(int turns) {
+        this.turns = turns;
+    }
+    
+    public void decreaseTurns() {
+        this.turns--;
     }
     
     public String readMessage(boolean interruptable) {
